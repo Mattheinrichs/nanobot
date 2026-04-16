@@ -23,7 +23,7 @@ def _write_provider_config(token: str, server_url: str) -> None:
     """Write token, server URL, and set nanobot as default provider."""
     config = load_config()
     config.providers.nanobot.api_key = token
-    config.providers.nanobot.api_base = server_url
+    config.providers.nanobot.api_base = f"{server_url}/v1"
 
     # Switch default provider to nanobot so `nanobot agent` works directly
     config.agents.defaults.provider = "nanobot"
