@@ -593,6 +593,7 @@ def serve(
         unified_session=runtime_config.agents.defaults.unified_session,
         disabled_skills=runtime_config.agents.defaults.disabled_skills,
         session_ttl_minutes=runtime_config.agents.defaults.session_ttl_minutes,
+        consolidation_ratio=runtime_config.agents.defaults.consolidation_ratio,
         tools_config=runtime_config.tools,
     )
 
@@ -688,6 +689,7 @@ def gateway(
         unified_session=config.agents.defaults.unified_session,
         disabled_skills=config.agents.defaults.disabled_skills,
         session_ttl_minutes=config.agents.defaults.session_ttl_minutes,
+        consolidation_ratio=config.agents.defaults.consolidation_ratio,
         tools_config=config.tools,
     )
 
@@ -967,6 +969,7 @@ def agent(
         unified_session=config.agents.defaults.unified_session,
         disabled_skills=config.agents.defaults.disabled_skills,
         session_ttl_minutes=config.agents.defaults.session_ttl_minutes,
+        consolidation_ratio=config.agents.defaults.consolidation_ratio,
         tools_config=config.tools,
     )
     restart_notice = consume_restart_notice_from_env()
