@@ -22,6 +22,8 @@ class ToolRegistry:
         self._cache_enabled = cache_results
         self._cache_max_size = cache_max_size
         self._result_cache: OrderedDict[tuple[str, str], Any] = OrderedDict()
+        self._cache_hits: int = 0
+        self._cache_misses: int = 0
 
     def register(self, tool: Tool) -> None:
         """Register a tool."""
@@ -146,9 +148,11 @@ class ToolRegistry:
 
         if cache_key in self._result_cache:
             logger.debug("Tool cache hit: {}", name)
+            self._cache_hits += 1
             self._result_cache.move_to_end(cache_key)
             return self._result_cache[cache_key]
 
+        self._cache_misses += 1
         result = await tool.execute(**params)
 
         # Don't cache errors — let the agent retry with different params.
@@ -160,9 +164,34 @@ class ToolRegistry:
 
         return result
 
+    @property
+    def cache_stats(self) -> dict[str, int | float]:
+        """Return hit/miss counters for the result cache.
+
+        Returns a dict with keys ``hits``, ``misses``, ``eligible`` (hits + misses),
+        and ``hit_rate`` (0.0–1.0; 0.0 when no eligible calls have been made).
+        """
+        eligible = self._cache_hits + self._cache_misses
+        return {
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "eligible": eligible,
+            "hit_rate": self._cache_hits / eligible if eligible > 0 else 0.0,
+        }
+
     def clear_result_cache(self) -> None:
-        """Clear the tool result cache (e.g. at session reset)."""
+        """Clear the tool result cache and log a hit-rate summary (e.g. at session reset)."""
+        eligible = self._cache_hits + self._cache_misses
+        if self._cache_enabled and eligible > 0:
+            logger.info(
+                "Tool cache stats: {}/{} hits ({:.0%})",
+                self._cache_hits,
+                eligible,
+                self._cache_hits / eligible,
+            )
         self._result_cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     @property
     def tool_names(self) -> list[str]:

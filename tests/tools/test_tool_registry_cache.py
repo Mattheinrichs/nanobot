@@ -237,3 +237,95 @@ async def test_clear_result_cache_forces_re_execution():
 
     await registry.execute_cached("search", tool, {"q": "hello"})
     assert tool.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# cache_stats
+# ---------------------------------------------------------------------------
+
+
+def test_cache_stats_initial_all_zeros():
+    registry = ToolRegistry(cache_results=True)
+    stats = registry.cache_stats
+    assert stats["hits"] == 0
+    assert stats["misses"] == 0
+    assert stats["eligible"] == 0
+    assert stats["hit_rate"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_cache_stats_counts_hits_and_misses():
+    registry = ToolRegistry(cache_results=True)
+    tool = _ReadOnlyTool("search")
+
+    # First call: miss
+    await registry.execute_cached("search", tool, {"q": "a"})
+    # Second call same params: hit
+    await registry.execute_cached("search", tool, {"q": "a"})
+    # Third call different params: miss
+    await registry.execute_cached("search", tool, {"q": "b"})
+
+    stats = registry.cache_stats
+    assert stats["hits"] == 1
+    assert stats["misses"] == 2
+    assert stats["eligible"] == 3
+
+
+@pytest.mark.asyncio
+async def test_cache_stats_hit_rate():
+    registry = ToolRegistry(cache_results=True)
+    tool = _ReadOnlyTool("search")
+
+    await registry.execute_cached("search", tool, {"q": "x"})  # miss
+    await registry.execute_cached("search", tool, {"q": "x"})  # hit
+    await registry.execute_cached("search", tool, {"q": "x"})  # hit
+
+    stats = registry.cache_stats
+    assert stats["hit_rate"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.asyncio
+async def test_cache_stats_not_incremented_when_cache_disabled():
+    registry = ToolRegistry(cache_results=False)
+    tool = _ReadOnlyTool("search")
+
+    await registry.execute_cached("search", tool, {"q": "a"})
+    await registry.execute_cached("search", tool, {"q": "a"})
+
+    stats = registry.cache_stats
+    assert stats["hits"] == 0
+    assert stats["misses"] == 0
+    assert stats["eligible"] == 0
+
+
+@pytest.mark.asyncio
+async def test_cache_stats_not_incremented_for_mutable_tools():
+    registry = ToolRegistry(cache_results=True)
+    tool = _MutableTool()
+
+    await registry.execute_cached("write_tool", tool, {})
+    await registry.execute_cached("write_tool", tool, {})
+
+    stats = registry.cache_stats
+    assert stats["hits"] == 0
+    assert stats["misses"] == 0
+
+
+@pytest.mark.asyncio
+async def test_clear_result_cache_resets_counters():
+    registry = ToolRegistry(cache_results=True)
+    tool = _ReadOnlyTool("search")
+
+    await registry.execute_cached("search", tool, {"q": "a"})  # miss
+    await registry.execute_cached("search", tool, {"q": "a"})  # hit
+
+    assert registry.cache_stats["hits"] == 1
+    assert registry.cache_stats["misses"] == 1
+
+    registry.clear_result_cache()
+
+    stats = registry.cache_stats
+    assert stats["hits"] == 0
+    assert stats["misses"] == 0
+    assert stats["eligible"] == 0
+    assert stats["hit_rate"] == 0.0
