@@ -710,7 +710,6 @@ class AgentLoop:
             # as current_message would double-project it into the prompt.
             messages = self.context.build_messages(
                 history=history,
-                current_message=msg.content,
                 current_message="" if is_subagent else msg.content,
                 channel=channel,
                 chat_id=chat_id,
