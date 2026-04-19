@@ -1682,6 +1682,28 @@ How it works:
 >
 > This differs from the **token-driven soft consolidation** that fires when a prompt exceeds the context budget: that path only advances an internal `last_consolidated` cursor and leaves the session file untouched, so the raw tool-call trail stays on disk and can still be replayed or audited. If you rely on that trail for debugging or auditing, leave `idleCompactAfterMinutes` at the default `0` and let only the token-driven path run.
 
+### Tool Result Cache
+
+When an agent performs repeated lookups within a session — fetching the same file, re-running the same search query, re-reading a URL — nanobot can skip redundant round-trips by returning the previously-seen result from an in-memory cache.
+
+Only **read-only** tools are eligible for caching (`read_file`, `list_dir`, `glob`, `grep`, `web_search`, `web_fetch`, and read-only MCP tools). Mutable tools (`write_file`, `edit_file`, `exec`, etc.) are never cached. Error results are also never cached, so the agent can retry with different parameters.
+
+```json
+{
+  "tools": {
+    "cacheToolResults": true,
+    "cacheToolResultsMaxSize": 128
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tools.cacheToolResults` | `false` | When `true`, caches results of read-only tool calls within a session. Identical calls return the cached result without re-executing. |
+| `tools.cacheToolResultsMaxSize` | `128` | Maximum number of results to keep in the cache. When full, the least-recently-used entry is evicted. |
+
+The cache is per-session and held in memory only — it is cleared when the session resets and is not persisted across restarts.
+
 ### Timezone
 
 Time is context. Context should be precise.

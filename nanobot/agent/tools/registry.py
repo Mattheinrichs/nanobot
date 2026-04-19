@@ -1,6 +1,10 @@
 """Tool registry for dynamic tool management."""
 
+import json
+from collections import OrderedDict
 from typing import Any
+
+from loguru import logger
 
 from nanobot.agent.tools.base import Tool
 
@@ -12,9 +16,12 @@ class ToolRegistry:
     Allows dynamic registration and execution of tools.
     """
 
-    def __init__(self):
+    def __init__(self, cache_results: bool = False, cache_max_size: int = 128):
         self._tools: dict[str, Tool] = {}
         self._cached_definitions: list[dict[str, Any]] | None = None
+        self._cache_enabled = cache_results
+        self._cache_max_size = cache_max_size
+        self._result_cache: OrderedDict[tuple[str, str], Any] = OrderedDict()
 
     def register(self, tool: Tool) -> None:
         """Register a tool."""
@@ -77,23 +84,31 @@ class ToolRegistry:
     ) -> tuple[Tool | None, dict[str, Any], str | None]:
         """Resolve, cast, and validate one tool call."""
         # Guard against invalid parameter types (e.g., list instead of dict)
-        if not isinstance(params, dict) and name in ('write_file', 'read_file'):
-            return None, params, (
-                f"Error: Tool '{name}' parameters must be a JSON object, got {type(params).__name__}. "
-                "Use named parameters: tool_name(param1=\"value1\", param2=\"value2\")"
+        if not isinstance(params, dict) and name in ("write_file", "read_file"):
+            return (
+                None,
+                params,
+                (
+                    f"Error: Tool '{name}' parameters must be a JSON object, got {type(params).__name__}. "
+                    'Use named parameters: tool_name(param1="value1", param2="value2")'
+                ),
             )
 
         tool = self._tools.get(name)
         if not tool:
-            return None, params, (
-                f"Error: Tool '{name}' not found. Available: {', '.join(self.tool_names)}"
+            return (
+                None,
+                params,
+                (f"Error: Tool '{name}' not found. Available: {', '.join(self.tool_names)}"),
             )
 
         cast_params = tool.cast_params(params)
         errors = tool.validate_params(cast_params)
         if errors:
-            return tool, cast_params, (
-                f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)
+            return (
+                tool,
+                cast_params,
+                (f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)),
             )
         return tool, cast_params, None
 
@@ -112,6 +127,42 @@ class ToolRegistry:
             return result
         except Exception as e:
             return f"Error executing {name}: {str(e)}" + _HINT
+
+    async def execute_cached(self, name: str, tool: Tool, params: dict[str, Any]) -> Any:
+        """Execute a tool, returning a cached result for read-only tools when caching is enabled.
+
+        Only caches results for tools where ``tool.read_only`` is ``True``.
+        Error results are never cached.  Uses LRU eviction once ``cache_max_size``
+        is reached.  Falls back to direct execution if the params are not
+        JSON-serialisable.
+        """
+        if not self._cache_enabled or not tool.read_only:
+            return await tool.execute(**params)
+
+        try:
+            cache_key = (name, json.dumps(params, sort_keys=True, default=str))
+        except Exception:
+            return await tool.execute(**params)
+
+        if cache_key in self._result_cache:
+            logger.debug("Tool cache hit: {}", name)
+            self._result_cache.move_to_end(cache_key)
+            return self._result_cache[cache_key]
+
+        result = await tool.execute(**params)
+
+        # Don't cache errors — let the agent retry with different params.
+        if not (isinstance(result, str) and result.startswith("Error")):
+            if len(self._result_cache) >= self._cache_max_size:
+                evicted = self._result_cache.popitem(last=False)
+                logger.debug("Tool cache evicted LRU entry: {}", evicted[0][0])
+            self._result_cache[cache_key] = result
+
+        return result
+
+    def clear_result_cache(self) -> None:
+        """Clear the tool result cache (e.g. at session reset)."""
+        self._result_cache.clear()
 
     @property
     def tool_names(self) -> list[str]:
