@@ -141,6 +141,7 @@
   - [Security](#security)
   - [Auto Compact](#auto-compact)
   - [Compact Tool Schemas](#compact-tool-schemas)
+  - [MCP Lazy Load](#mcp-lazy-load)
   - [Timezone](#timezone)
   - [Unified Session](#unified-session)
   - [Disabled Skills](#disabled-skills)
@@ -1739,6 +1740,40 @@ When enabled, `get_definitions()` post-processes each schema before passing it t
 > that helps the LLM form correct calls. Measure the trade-off against your workload before
 > enabling in production. Types, required/optional markers, and short enums are always
 > preserved.
+
+### MCP Lazy Load
+
+When many MCP servers are configured, their full tool schemas are sent to the LLM on
+**every turn** — even for servers the agent never ends up using. MCP lazy load eliminates
+this overhead by deferring registration until a server is actually needed.
+
+**How it works:**
+
+1. At startup, one thin *proxy tool* is registered per MCP server instead of all its real
+   tools. The proxy name is `mcp_<server-name>__proxy` and its description tells the agent
+   it provides tools from that server.
+2. When the agent calls the proxy, nanobot connects to the server, registers all its real
+   tools/resources/prompts, removes the proxy, and returns a list of the newly available
+   tool names so the agent can immediately call the right one.
+3. If the connection fails the proxy stays registered and the agent can retry on the next
+   turn.
+
+```json
+{
+  "tools": {
+    "mcpLazyLoad": true
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tools.mcpLazyLoad` | `false` | When `true`, register one proxy tool per MCP server at startup instead of eagerly connecting to all servers. |
+
+> [!NOTE]
+> The first call to any MCP server incurs one extra round-trip (the tool listing). On
+> subsequent turns the real tools are directly available with no overhead. Combine with
+> `compactSchemas` and `cacheToolResults` for maximum token efficiency.
 
 ### Timezone
 

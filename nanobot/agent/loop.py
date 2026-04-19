@@ -219,6 +219,15 @@ class AgentLoop:
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
         self._mcp_connecting = False
+        if _tc.mcp_lazy_load and self._mcp_servers:
+            from nanobot.agent.tools.mcp import MCPProxyTool
+
+            for _srv_name, _srv_cfg in self._mcp_servers.items():
+                self.tools.register(MCPProxyTool(_srv_name, _srv_cfg, self.tools, self._mcp_stacks))
+            self._mcp_connected = True  # proxies registered; eager connect skipped
+            logger.info(
+                "MCP lazy load enabled: {} proxy tool(s) registered", len(self._mcp_servers)
+            )
         self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
         self._background_tasks: list[asyncio.Task] = []
         self._session_locks: dict[str, asyncio.Lock] = {}

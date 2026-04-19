@@ -265,6 +265,9 @@ class ToolsConfig(Base):
     compact_schemas_max_desc_length: int = Field(
         default=80, ge=0
     )  # Max chars for top-level tool descriptions when compact_schemas=True (0 = no truncation)
+    mcp_lazy_load: bool = (
+        False  # Defer MCP tool registration until first use; one proxy per server at startup
+    )
 
 
 class Config(BaseSettings):
