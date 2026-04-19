@@ -268,6 +268,12 @@ class ToolsConfig(Base):
     mcp_lazy_load: bool = (
         False  # Defer MCP tool registration until first use; one proxy per server at startup
     )
+    cache_tool_results: bool = (
+        False  # Cache results of read-only tools within a session to avoid redundant calls
+    )
+    cache_tool_results_max_size: int = Field(
+        default=128, ge=1
+    )  # Maximum number of cached results per session (LRU eviction)
 
 
 class Config(BaseSettings):

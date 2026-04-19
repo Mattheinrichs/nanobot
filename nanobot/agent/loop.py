@@ -200,6 +200,8 @@ class AgentLoop:
         self.tools = ToolRegistry(
             compact_schemas=_tc.compact_schemas,
             compact_schemas_max_desc_length=_tc.compact_schemas_max_desc_length,
+            cache_results=_tc.cache_tool_results,
+            cache_max_size=_tc.cache_tool_results_max_size,
         )
         self.runner = AgentRunner(provider)
         self.subagents = SubagentManager(
@@ -444,29 +446,12 @@ class AgentLoop:
                 context_block_limit=self.context_block_limit,
                 provider_retry_mode=self.provider_retry_mode,
                 progress_callback=on_progress,
+                retry_wait_callback=on_retry_wait,
                 checkpoint_callback=_checkpoint,
                 injection_callback=_drain_pending,
             )
         )
-        result = await self.runner.run(AgentRunSpec(
-            initial_messages=initial_messages,
-            tools=self.tools,
-            model=self.model,
-            max_iterations=self.max_iterations,
-            max_tool_result_chars=self.max_tool_result_chars,
-            hook=hook,
-            error_message="Sorry, I encountered an error calling the AI model.",
-            concurrent_tools=True,
-            workspace=self.workspace,
-            session_key=session.key if session else None,
-            context_window_tokens=self.context_window_tokens,
-            context_block_limit=self.context_block_limit,
-            provider_retry_mode=self.provider_retry_mode,
-            progress_callback=on_progress,
-            retry_wait_callback=on_retry_wait,
-            checkpoint_callback=_checkpoint,
-            injection_callback=_drain_pending,
-        ))
+
         self._last_usage = result.usage
         if result.stop_reason == "max_iterations":
             logger.warning("Max iterations ({}) reached", self.max_iterations)
