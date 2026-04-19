@@ -140,6 +140,7 @@
   - [MCP (Model Context Protocol)](#mcp-model-context-protocol)
   - [Security](#security)
   - [Auto Compact](#auto-compact)
+  - [Compact Tool Schemas](#compact-tool-schemas)
   - [Timezone](#timezone)
   - [Unified Session](#unified-session)
   - [Disabled Skills](#disabled-skills)
@@ -1705,6 +1706,39 @@ How it works:
 > Concretely, auto compact rewrites `sessions/<key>.jsonl` in place: older messages (including their structured `tool_calls` / `tool_call_id` / `reasoning_content`) are replaced by just the retained recent suffix (currently 8 messages), while the archived prefix is preserved only as a plain-text summary appended to `memory/history.jsonl` (or a `[RAW] ...` flattened dump if LLM summarization fails). The original structured JSON of those turns is no longer recoverable from the session file.
 >
 > This differs from the **token-driven soft consolidation** that fires when a prompt exceeds the context budget: that path only advances an internal `last_consolidated` cursor and leaves the session file untouched, so the raw tool-call trail stays on disk and can still be replayed or audited. If you rely on that trail for debugging or auditing, leave `idleCompactAfterMinutes` at the default `0` and let only the token-driven path run.
+
+### Compact Tool Schemas
+
+When an agent has many tools registered, the full JSON schemas for every tool consume a
+significant portion of the context window on every turn. Compact schema mode reduces this
+by stripping verbose fields that the LLM rarely needs when selecting or calling tools.
+
+When enabled, `get_definitions()` post-processes each schema before passing it to the LLM:
+
+- **Parameter descriptions** are stripped (the top-level tool description is kept).
+- **Default values** are removed from parameter definitions.
+- **Long enum lists** (more than 5 values) are collapsed to just the parameter type.
+- **Top-level tool descriptions** are truncated to `compactSchemasMaxDescLength` characters.
+
+```json
+{
+  "tools": {
+    "compactSchemas": true,
+    "compactSchemasMaxDescLength": 80
+  }
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tools.compactSchemas` | `false` | When `true`, strips verbose fields from tool schemas before passing them to the LLM. |
+| `tools.compactSchemasMaxDescLength` | `80` | Maximum characters for top-level tool descriptions. Descriptions longer than this are truncated. Set to `0` to disable truncation. |
+
+> [!NOTE]
+> Compact schemas reduce context tokens at the cost of removing per-parameter guidance
+> that helps the LLM form correct calls. Measure the trade-off against your workload before
+> enabling in production. Types, required/optional markers, and short enums are always
+> preserved.
 
 ### Timezone
 
